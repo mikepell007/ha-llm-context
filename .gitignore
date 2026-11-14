@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+.pytest_cache/
+.DS_Store
+
+# Secrets and pulled data: never commit
+.env
+out/
