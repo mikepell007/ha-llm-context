@@ -2,6 +2,8 @@ __pycache__/
 .venv/
 .pytest_cache/
 .DS_Store
+*.egg-info/
+build/
 
 # Secrets and pulled data: never commit
 .env

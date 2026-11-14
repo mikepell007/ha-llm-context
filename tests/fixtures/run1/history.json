@@ -1,0 +1,19 @@
+[
+  [
+    {"entity_id": "binary_sensor.hallway_motion", "state": "off", "attributes": {"device_class": "motion", "friendly_name": "Hallway motion"}, "last_changed": "2026-03-07T17:40:00+00:00", "last_updated": "2026-03-07T17:40:00+00:00"},
+    {"entity_id": "binary_sensor.hallway_motion", "state": "on", "attributes": {"device_class": "motion", "friendly_name": "Hallway motion"}, "last_changed": "2026-03-07T19:02:11+00:00", "last_updated": "2026-03-07T19:02:11+00:00"},
+    {"entity_id": "binary_sensor.hallway_motion", "state": "on", "attributes": {"device_class": "motion", "friendly_name": "Hallway motion", "linkquality": 120}, "last_changed": "2026-03-07T19:02:11+00:00", "last_updated": "2026-03-07T19:02:40+00:00"},
+    {"entity_id": "binary_sensor.hallway_motion", "state": "off", "attributes": {"device_class": "motion", "friendly_name": "Hallway motion"}, "last_changed": "2026-03-07T19:04:11+00:00", "last_updated": "2026-03-07T19:04:11+00:00"}
+  ],
+  [
+    {"entity_id": "light.hallway", "state": "off", "attributes": {"color_mode": null, "brightness": null, "friendly_name": "Hallway"}, "last_changed": "2026-03-07T16:00:00+00:00", "last_updated": "2026-03-07T16:00:00+00:00"}
+  ],
+  [
+    {"entity_id": "sensor.hallway_illuminance", "state": "41", "attributes": {"unit_of_measurement": "lx"}, "last_changed": "2026-03-07T17:55:00+00:00", "last_updated": "2026-03-07T17:55:00+00:00"},
+    {"entity_id": "sensor.hallway_illuminance", "state": "38", "attributes": {"unit_of_measurement": "lx"}, "last_changed": "2026-03-07T19:00:00+00:00", "last_updated": "2026-03-07T19:00:00+00:00"}
+  ],
+  [
+    {"entity_id": "automation.hallway_motion_light", "state": "on", "attributes": {"id": "1700000000001", "current": 0, "last_triggered": "2026-03-06T22:10:00+00:00"}, "last_changed": "2026-03-07T10:00:00+00:00", "last_updated": "2026-03-07T10:00:00+00:00"},
+    {"entity_id": "automation.hallway_motion_light", "state": "on", "attributes": {"id": "1700000000001", "current": 0, "last_triggered": "2026-03-07T19:02:11+00:00"}, "last_changed": "2026-03-07T10:00:00+00:00", "last_updated": "2026-03-07T19:02:11+00:00"}
+  ]
+]

@@ -1,0 +1,1 @@
+[[{"entity_id": "climate.fake_office", "state": "heat", "attributes": {"hvac_action": "idle", "current_temperature": 19.5, "temperature": 21}, "last_changed": "2026-03-07T17:00:00+00:00", "last_updated": "2026-03-07T17:00:00+00:00"}]]

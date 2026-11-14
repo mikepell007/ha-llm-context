@@ -1,0 +1,24 @@
+{
+  "automation.hallway_motion_light": {
+    "item_id": "1700000000001",
+    "stored": 5,
+    "runs": [
+      {
+        "run_id": "4f2a9c1e7b3d4e5f",
+        "domain": "automation",
+        "item_id": "1700000000001",
+        "state": "stopped",
+        "script_execution": "failed_conditions",
+        "last_step": "condition/0",
+        "timestamp": {"start": "2026-03-07T19:02:11.250000+00:00", "finish": "2026-03-07T19:02:11.260000+00:00"},
+        "trigger": "state of binary_sensor.hallway_motion",
+        "trace": {
+          "trigger/0": [{"path": "trigger/0", "timestamp": "2026-03-07T19:02:11.250000+00:00", "changed_variables": {"trigger": {"platform": "state", "entity_id": "binary_sensor.hallway_motion", "from_state": {"state": "off"}, "to_state": {"state": "on"}}}}],
+          "condition/0": [{"path": "condition/0", "timestamp": "2026-03-07T19:02:11.255000+00:00", "result": {"result": false, "entities": ["sensor.hallway_illuminance"]}}],
+          "condition/0/entity_id/0": [{"path": "condition/0/entity_id/0", "timestamp": "2026-03-07T19:02:11.255000+00:00", "result": {"result": false, "state": 38.0, "wanted_state_below": 30.0}}]
+        },
+        "config": {"id": "1700000000001", "alias": "Hallway motion light", "triggers": [{"trigger": "state", "entity_id": "binary_sensor.hallway_motion", "to": "on"}], "conditions": [{"condition": "numeric_state", "entity_id": "sensor.hallway_illuminance", "below": 30}], "actions": [{"action": "light.turn_on", "target": {"entity_id": "light.hallway"}, "data": {"brightness_pct": 40}}]}
+      }
+    ]
+  }
+}

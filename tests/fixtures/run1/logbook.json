@@ -1,0 +1,6 @@
+[
+  {"when": "2026-03-07T19:02:11.200000+00:00", "name": "Hallway motion", "state": "on", "entity_id": "binary_sensor.hallway_motion"},
+  {"when": "2026-03-07T19:02:11.300000+00:00", "name": "Hallway motion light", "message": "triggered by state of Hallway motion", "domain": "automation", "entity_id": "automation.hallway_motion_light", "context_entity_id": "binary_sensor.hallway_motion", "context_entity_id_name": "Hallway motion", "context_event_type": "state_changed"},
+  {"when": "2026-03-07T19:04:11.100000+00:00", "name": "Hallway motion", "state": "off", "entity_id": "binary_sensor.hallway_motion"},
+  {"when": "2026-03-07T19:30:00+00:00", "name": "Kitchen", "state": "on", "entity_id": "light.kitchen"}
+]

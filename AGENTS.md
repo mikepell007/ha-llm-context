@@ -5,7 +5,22 @@ condenses them into short timelines; and sends them with a question to a local L
 through an OpenAI-compatible API. It's a troubleshooting aid, not an HA
 integration: it runs outside HA and only reads from it.
 
-Status: design only. No code yet. Update this file as the layout takes shape.
+Status: first working slice of all three stages. Not yet run against a live HA
+instance. Update this file as the layout changes.
+
+## Layout
+
+- `src/ha_llm_context/config.py`: `.env` loading, settings, `--since`/`--until` parsing
+- `src/ha_llm_context/collect.py`: REST + WebSocket pulls into a run directory
+  (`meta.json`, `history.json`, `logbook.json`, `traces.json`, and `error_log.txt`
+  or, when HA writes no log file and `/api/error_log` returns 404, `system_log.json`)
+- `src/ha_llm_context/condense.py`: run directory → `timeline.txt`; pure, no network
+- `src/ha_llm_context/ask.py`: prompt building and the `/chat/completions` call
+- `src/ha_llm_context/cli.py`: `collect`, `condense`, `ask`, `run` subcommands
+- `tests/fixtures/run1/`: an invented run (hallway motion light blocked by a
+  lux condition). Extend it, or add new invented runs, instead of using real pulls.
+
+Dev setup: `python3 -m venv .venv && .venv/bin/pip install -e '.[test]' && .venv/bin/pytest`
 
 ## Design
 
