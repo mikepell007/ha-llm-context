@@ -27,7 +27,7 @@ def test_unchanged_rows_are_dropped_and_counted():
 
 def test_trace_run_shows_outcome_and_why_condition_failed():
     tl = condense(FIXTURE, OPTS)
-    assert "RUN 4f2a9c1e trigger: state of binary_sensor.hallway_motion (off → on) → failed_conditions" in tl
+    assert "RUN 4f2a9c1e trigger: state of binary_sensor.hallway_motion (off → on) → stopped: a condition was false" in tl
     assert "condition/0/entity_id/0: FAIL (state=38, wanted_state_below=30)" in tl
     assert '"below":30' in tl  # automation config included
 
@@ -152,3 +152,39 @@ def test_large_config_is_left_out_unless_asked():
         (run_dir / "traces.json").write_text(json.dumps(traces))
         assert "left out (" in condense(run_dir, OPTS)
         assert "x" * 3000 in condense(run_dir, Options(tz=UTC, config_limit=None))
+
+
+def _run(rid, second, code, steps=None):
+    return {"run_id": rid, "state": "stopped", "script_execution": code,
+            "timestamp": {"start": f"2026-03-07T19:00:{second:02d}+00:00"},
+            "trace": steps or {"trigger/0": [{}]}}
+
+
+def test_rejected_triggers_fold_and_trace_limit_is_flagged():
+    from ha_llm_context.condense import trace_events
+
+    runs = [_run(f"r{i}xxxxxxx", i, "failed_single") for i in range(4)]
+    traces = {"automation.fake": {"stored": 4, "runs": runs}}
+    start = datetime(2026, 3, 7, 18, tzinfo=UTC)
+    events, _ = trace_events(traces, start, start.replace(hour=20), OPTS, Dropped())
+    texts = [e.text for e in events]
+    assert any(t.startswith("4 triggers NOT RUN: an earlier run was still in progress") for t in texts)
+    assert any("HA keeps only 4 traces" in t and "stored_traces" in t for t in texts)
+
+
+def test_no_trace_limit_warning_when_older_traces_exist():
+    from ha_llm_context.condense import trace_events
+
+    traces = {"automation.fake": {"stored": 5, "runs": [_run("aaaaaaaa", 1, "finished")]}}
+    start = datetime(2026, 3, 7, 18, tzinfo=UTC)
+    events, _ = trace_events(traces, start, start.replace(hour=20), OPTS, Dropped())
+    assert [e.text for e in events] == ["RUN aaaaaaaa trigger: ? → finished"]
+
+
+def test_entity_without_history_is_called_out():
+    from ha_llm_context.condense import missing_history
+
+    start = datetime(2026, 3, 7, 18, tzinfo=UTC)
+    rows = [[{"entity_id": "light.fake"}]]
+    [ev] = missing_history(rows, {"light.fake", "automation.fake"}, start)
+    assert ev.entity == "automation.fake" and "excluded from the recorder" in ev.text

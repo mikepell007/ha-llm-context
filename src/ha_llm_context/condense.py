@@ -101,6 +101,13 @@ def _kept_attrs(entity_id: str, attrs: dict[str, Any], opts: Options) -> dict[st
 
 # ---------------------------------------------------------------- history
 
+def missing_history(history: list[list[dict]], entities: set[str], start: datetime) -> list[Event]:
+    present = {rows[0]["entity_id"] for rows in history if rows}
+    return [Event(start, e, "no history recorded (excluded from the recorder, "
+                  "or the entity ID is wrong); its state and attributes are unknown", order=-2)
+            for e in sorted(entities - present)]
+
+
 def history_events(history: list[list[dict]], start: datetime, opts: Options,
                    dropped: Dropped) -> list[Event]:
     events: list[Event] = []
@@ -324,13 +331,56 @@ def step_lines(steps: dict[str, list[dict]], config: dict[str, Any]) -> list[str
     return [f"{ln} (×{n})" if n > 1 else ln for ln, n in zip(collapsed, counts)]
 
 
+# script_execution codes, in words a model won't misread. "failed_single" in
+# particular is not a failure of the run's steps: the run never started.
+OUTCOMES = {
+    "finished": "finished",
+    "failed_conditions": "stopped: a condition was false",
+    "failed_single": "NOT RUN: an earlier run was still in progress (mode: single)",
+    "failed_max_runs": "NOT RUN: too many runs already in progress (mode: queued/parallel)",
+    "cancelled": "cancelled before finishing (replaced by a newer run, or turned off)",
+    "error": "stopped with an error",
+    "running": "still running when collected",
+}
+REJECTED = ("failed_single", "failed_max_runs")
+
+
+def _outcome(run: dict[str, Any]) -> str:
+    if run.get("state") == "running":
+        return "running"
+    return run.get("script_execution") or run.get("state") or "?"
+
+
+def _fold_rejected(events: list[Event], codes: list[str]) -> list[Event]:
+    """Collapse back-to-back rejected triggers into one line."""
+    out: list[Event] = []
+    i = 0
+    while i < len(events):
+        j = i
+        while j + 1 < len(events) and codes[j + 1] == codes[i] and codes[i] in REJECTED:
+            j += 1
+        if j > i:
+            first = events[i]
+            first.text = (f"{j - i + 1} triggers {OUTCOMES[codes[i]]}, "
+                          f"until {{t:{events[j].when.isoformat()}}}")
+            first.detail = []
+            out.append(first)
+        else:
+            out.append(events[i])
+        i = j + 1
+    return out
+
+
 def trace_events(traces: dict[str, Any], start: datetime, end: datetime,
                  opts: Options, dropped: Dropped) -> tuple[list[Event], dict[str, Any]]:
     events: list[Event] = []
     configs: dict[str, Any] = {}
     for entity, info in traces.items():
         seen: dict[tuple, str] = {}  # step signature -> first run id with it
-        for run in info.get("runs", []):
+        mine: list[Event] = []
+        codes: list[str] = []
+        runs = info.get("runs", [])
+        for run in runs:
             when = _ts(run["timestamp"]["start"])
             if not (start <= when <= end):
                 dropped.add("traces outside the window")
@@ -345,7 +395,8 @@ def trace_events(traces: dict[str, Any], start: datetime, end: datetime,
                     trig += f" ({fs['state']} → {ts['state']})"
                 if not trig and tv.get("description"):
                     trig = tv["description"]
-            outcome = run.get("script_execution") or run.get("state") or "?"
+            code = _outcome(run)
+            outcome = OUTCOMES.get(code, code)
             run_id = run.get("run_id", "")[:8]
             text = f"RUN {run_id} trigger: {trig or '?'} → {outcome}"
             config = run.get("config") or {}
@@ -359,9 +410,22 @@ def trace_events(traces: dict[str, Any], start: datetime, end: datetime,
                 detail = [f"(same steps as RUN {seen[signature]})"]
             else:
                 seen[signature] = run_id
-            events.append(Event(when, entity, text, detail, order=-1))
+            mine.append(Event(when, entity, text, detail, order=-1))
+            codes.append(code)
             if opts.include_config and config:
                 configs[entity] = config
+        folded = _fold_rejected(mine, codes)
+        dropped.add("rejected triggers folded into one line", len(mine) - len(folded))
+        events.extend(folded)
+        stored = info.get("stored")
+        if runs and stored is not None and len(runs) >= stored:
+            # Every stored trace is inside the window, so HA has likely discarded
+            # earlier runs in it, including any long run that caused the rejections.
+            oldest = min(_ts(r["timestamp"]["start"]) for r in runs)
+            events.append(Event(start, entity,
+                f"traces: WARNING HA keeps only {stored} traces for this automation and the "
+                f"oldest is from {{t:{oldest.isoformat()}}}; earlier runs in the window are "
+                "missing. Raise 'trace: stored_traces:' in the automation's YAML.", order=-2))
         if info.get("note"):
             events.append(Event(start, entity, f"traces: {info['note']}"))
     return events, configs
@@ -559,11 +623,13 @@ def condense(run_dir: Path, opts: Options | None = None) -> str:
             return default
         return p.read_text() if name.endswith(".txt") else json.loads(p.read_text())
 
-    events = history_events(load("history.json", []), start, opts, dropped)
+    history = load("history.json", [])
+    events = history_events(history, start, opts, dropped)
+    notes = missing_history(history, entities, start)
     tevents, configs = trace_events(load("traces.json", {}), start, end, opts, dropped)
     events += logbook_events(load("logbook.json", []), entities, start, end, events, tevents,
                              opts, dropped)
-    events += tevents
+    events += tevents + notes
     events += error_events(load("error_log.txt", ""), entities, start, end, opts, dropped,
                            system_log=load("system_log.json", None))
     return render(meta, events, configs, dropped, opts)
