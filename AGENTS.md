@@ -5,8 +5,8 @@ condenses them into short timelines; and sends them with a question to a local L
 through an OpenAI-compatible API. It's a troubleshooting aid, not an HA
 integration: it runs outside HA and only reads from it.
 
-Status: first working slice of all three stages. Not yet run against a live HA
-instance. Update this file as the layout changes.
+Status: all three stages work against a live HA instance. The Open WebUI tool is
+new and not yet tried inside Open WebUI. Update this file as the layout changes.
 
 ## Layout
 
@@ -16,7 +16,12 @@ instance. Update this file as the layout changes.
   or, when HA writes no log file and `/api/error_log` returns 404, `system_log.json`)
 - `src/ha_llm_context/condense.py`: run directory → `timeline.txt`; pure, no network
 - `src/ha_llm_context/ask.py`: prompt building and the `/chat/completions` call
-- `src/ha_llm_context/cli.py`: `collect`, `condense`, `ask`, `run` subcommands
+- `src/ha_llm_context/pipeline.py`: entity search and collect-then-condense in one
+  call; shared by the CLI and the Open WebUI tool
+- `src/ha_llm_context/cli.py`: `find`, `collect`, `condense`, `ask`, `run` subcommands
+- `openwebui/ha_timeline_tool.py`: Open WebUI tool (pasted into Open WebUI, which
+  installs this package from GitHub). It must stay a single file that imports
+  `ha_llm_context`; keep logic in the package, not here. Settings are Valves.
 - `tests/fixtures/run1/`: an invented run (hallway motion light blocked by a
   lux condition). Extend it, or add new invented runs, instead of using real pulls.
 

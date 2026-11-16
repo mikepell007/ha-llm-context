@@ -12,6 +12,7 @@ from . import ask as ask_mod
 from .collect import collect
 from .condense import Options, condense
 from .config import HASettings, LLMSettings, load_dotenv, parse_when
+from .pipeline import find_entities
 
 
 def _add_collect_args(p: argparse.ArgumentParser) -> None:
@@ -83,6 +84,10 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ha-llm-context", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    p = sub.add_parser("find", help="search entities by ID or friendly name")
+    p.add_argument("query", nargs="+", help="words that must all appear, e.g. office climate")
+    p.add_argument("--domain", default="", help="only this domain, e.g. climate")
+
     p = sub.add_parser("collect", help="pull raw data from Home Assistant")
     _add_collect_args(p)
 
@@ -101,7 +106,9 @@ def main(argv: list[str] | None = None) -> None:
     _add_ask_args(p, required=False)
 
     args = parser.parse_args(argv)
-    if args.cmd == "collect":
+    if args.cmd == "find":
+        print(find_entities(HASettings.from_env(), " ".join(args.query), args.domain))
+    elif args.cmd == "collect":
         print(_do_collect(args))
     elif args.cmd == "condense":
         timeline = _do_condense(args.run_dir, args)

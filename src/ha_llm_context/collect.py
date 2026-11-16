@@ -72,6 +72,9 @@ class HAClient:
     def state(self, entity_id: str) -> dict[str, Any]:
         return self._get(f"/api/states/{entity_id}").json()
 
+    def states(self) -> list[dict[str, Any]]:
+        return self._get("/api/states").json()
+
     def close(self) -> None:
         self.http.close()
 

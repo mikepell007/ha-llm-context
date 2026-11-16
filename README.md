@@ -56,6 +56,12 @@ the window. Use `--attr NAME` to keep extra attributes beyond the per-domain
 defaults, and `--tz` to choose the display time zone. The timeline ends with a
 "Dropped" section that counts everything left out.
 
+## Open WebUI
+
+To use this from a chat instead of the terminal, see
+[openwebui/README.md](openwebui/README.md). It adds a tool that lets the model
+look up entities and pull timelines itself.
+
 ## Tips
 
 - By default HA keeps only the last 5 traces per automation. To keep more, add
