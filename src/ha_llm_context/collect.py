@@ -1,7 +1,7 @@
 """Stage 1: pull raw data from Home Assistant into a run directory.
 
 Read-only: this module only issues GET requests and WebSocket queries
-(auth, trace/list, trace/get, system_log/list). It never calls services or
+(auth, trace/list, trace/get, automation/config, system_log/list). It never calls services or
 writes state.
 
 Run directory layout:
@@ -16,6 +16,7 @@ Run directory layout:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -131,7 +132,61 @@ def collect_traces(
             for s in runs_in_window(summaries, start, end)
         ]
         out[entity_id] = {"item_id": item_id, "runs": runs, "stored": len(summaries)}
+        try:
+            # The automation as written (for blueprints: the blueprint inputs).
+            # Used to find related entities even when nothing ran in the window.
+            out[entity_id]["config"] = ws.call("automation/config", entity_id=entity_id).get("config")
+        except RuntimeError:
+            pass
     return out
+
+
+_ENTITY_REF = re.compile(r"\b[a-z_]+\.[a-z0-9_]+\b")
+
+
+def find_entity_refs(obj: Any, known: set[str]) -> list[str]:
+    """Entity IDs mentioned anywhere in a config (keys, values, templates),
+    in order of first appearance, keeping only ones that exist in HA."""
+    found: dict[str, None] = {}
+
+    def walk(o: Any) -> None:
+        if isinstance(o, dict):
+            for k, v in o.items():
+                walk(k)
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+        elif isinstance(o, str):
+            for m in _ENTITY_REF.findall(o):
+                if m in known:
+                    found.setdefault(m)
+
+    walk(obj)
+    return list(found)
+
+
+def related_entities(traces: dict[str, Any], known: set[str], exclude: set[str],
+                     limit: int) -> tuple[dict[str, list[str]], int]:
+    """Entities each automation's config refers to. Returns ({automation: [ids]}, dropped)."""
+    out: dict[str, list[str]] = {}
+    taken = set(exclude)
+    dropped = 0
+    for automation, info in traces.items():
+        sources = [info.get("config")]
+        for run in info.get("runs", []):
+            sources += [run.get("config"), run.get("blueprint_inputs")]
+        mine = []
+        for ref in find_entity_refs([s for s in sources if s], known):
+            if ref in taken or ref == automation:
+                continue
+            if len(taken) - len(exclude) >= limit:
+                dropped += 1
+                continue
+            taken.add(ref)
+            mine.append(ref)
+        out[automation] = mine
+    return out, dropped
 
 
 def collect_errors(client: HAClient, ws: HAWebSocket, out_dir: Path) -> list[str]:
@@ -161,20 +216,35 @@ def collect(
     start: datetime,
     end: datetime,
     out_dir: Path,
+    related: bool = True,
+    max_related: int = 30,
 ) -> Path:
-    """Pull everything for the window into out_dir and return it."""
+    """Pull everything for the window into out_dir and return it.
+
+    With related=True, entities that the requested automations' configs refer
+    to are added (up to max_related), so the user needn't list them.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     automations = [e for e in entities if e.startswith("automation.")]
     notes: list[str] = []
+    related_map: dict[str, list[str]] = {}
+    all_entities = list(entities)
 
     client = HAClient(settings)
     ws = HAWebSocket(settings)
     try:
-        (out_dir / "history.json").write_text(json.dumps(client.history(start, end, entities)))
-        (out_dir / "logbook.json").write_text(json.dumps(client.logbook(start, end)))
-        notes += collect_errors(client, ws, out_dir)
         traces = collect_traces(client, ws, automations, start, end) if automations else {}
         (out_dir / "traces.json").write_text(json.dumps(traces))
+        if related and traces:
+            known = {s["entity_id"] for s in client.states()}
+            related_map, dropped = related_entities(traces, known, set(entities), max_related)
+            for ids in related_map.values():
+                all_entities += ids
+            if dropped:
+                notes.append(f"{dropped} more related entities left out (limit {max_related})")
+        (out_dir / "history.json").write_text(json.dumps(client.history(start, end, all_entities)))
+        (out_dir / "logbook.json").write_text(json.dumps(client.logbook(start, end)))
+        notes += collect_errors(client, ws, out_dir)
     finally:
         ws.close()
         client.close()
@@ -182,7 +252,9 @@ def collect(
     meta = {
         "start": _iso(start),
         "end": _iso(end),
-        "entities": entities,
+        "entities": all_entities,
+        "requested": entities,
+        "related": related_map,
         "collected_at": _iso(datetime.now().astimezone()),
         "notes": notes,
     }

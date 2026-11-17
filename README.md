@@ -52,7 +52,17 @@ ha-llm-context ask out/<timestamp> -q "..."              # uses timeline.txt
 ```
 
 Any `automation.*` entity you pass also pulls that automation's traces from
-the window. Use `--attr NAME` to keep extra attributes beyond the per-domain
+the window, plus the entities its config refers to (sensors, helpers, the
+devices it controls), so naming the automation is usually enough. Use
+`--no-related` to turn that off, or `--max-related` to change the limit of 30.
+
+For each automation run, the timeline shows:
+- each step, labelled from the config, and how it went
+- how long the run took, and its slowest step when it ran 10 seconds or more
+- the variables its actions use; later runs show only the values that changed
+
+Back-to-back runs that took the same steps fold into one line that lists the
+net change in each variable across them. Use `--attr NAME` to keep extra attributes beyond the per-domain
 defaults, and `--tz` to choose the display time zone. The timeline ends with a
 "Dropped" section that counts everything left out.
 

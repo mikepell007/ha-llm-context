@@ -128,17 +128,20 @@ def test_steps_are_labelled_from_config_and_if_branches_folded():
 def test_runs_with_identical_steps_are_shown_once():
     from ha_llm_context.condense import trace_events
 
-    def run(rid, minute):
+    def run(rid, minute, result):
         return {"run_id": rid, "script_execution": "finished",
-                "timestamp": {"start": f"2026-03-07T19:{minute:02d}:00+00:00"},
-                "trace": {"action/0": [{"result": {"result": True}}]}}
+                "timestamp": {"start": f"2026-03-07T19:{minute:02d}:00+00:00",
+                              "finish": f"2026-03-07T19:{minute:02d}:00.1+00:00"},
+                "trace": {"action/0": [{"result": {"result": result}}]}}
 
-    traces = {"automation.fake": {"runs": [run("aaaaaaaa1", 1), run("bbbbbbbb2", 2)]}}
-    dropped = Dropped()
+    # A, B, A: not back to back, so the third run points at the first.
+    runs = [run("aaaaaaaa1", 1, True), run("bbbbbbbb2", 2, False), run("cccccccc3", 3, True)]
     start = datetime(2026, 3, 7, 18, tzinfo=UTC)
-    events, _ = trace_events(traces, start, start.replace(hour=20), OPTS, dropped)
+    events, _ = trace_events({"automation.fake": {"runs": runs}}, start,
+                             start.replace(hour=20), OPTS, Dropped())
     assert events[0].detail == ["action/0: pass"]
-    assert events[1].detail == ["(same steps as RUN aaaaaaaa)"]
+    assert events[1].detail == ["action/0: FAIL"]
+    assert events[2].detail == ["(same steps as RUN aaaaaaaa)"]
 
 
 def test_large_config_is_left_out_unless_asked():
@@ -156,7 +159,8 @@ def test_large_config_is_left_out_unless_asked():
 
 def _run(rid, second, code, steps=None):
     return {"run_id": rid, "state": "stopped", "script_execution": code,
-            "timestamp": {"start": f"2026-03-07T19:00:{second:02d}+00:00"},
+            "timestamp": {"start": f"2026-03-07T19:00:{second:02d}+00:00",
+                          "finish": f"2026-03-07T19:00:{second:02d}.5+00:00"},
             "trace": steps or {"trigger/0": [{}]}}
 
 

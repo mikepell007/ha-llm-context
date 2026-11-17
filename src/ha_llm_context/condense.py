@@ -44,6 +44,9 @@ class Options:
     tz: tzinfo | None = None            # display zone; None = system local
     extra_attrs: tuple[str, ...] = ()   # kept for every domain
     max_changes_per_entity: int = 40    # beyond this, keep head and tail
+    max_changes_related: int = 12       # same, for entities added from automation configs
+    max_var_chars: int = 2500           # automation variable text per run (first run; later runs show changes)
+    slow_run_seconds: float = 10        # runs at least this long name their slowest step
     max_errors: int = 30                # unique error-log messages
     include_config: bool = True         # automation config from the trace
     config_limit: int | None = 2000     # leave out configs longer than this; None = no limit
@@ -101,15 +104,21 @@ def _kept_attrs(entity_id: str, attrs: dict[str, Any], opts: Options) -> dict[st
 
 # ---------------------------------------------------------------- history
 
-def missing_history(history: list[list[dict]], entities: set[str], start: datetime) -> list[Event]:
+def missing_history(history: list[list[dict]], entities: set[str], start: datetime,
+                    related: set[str] = frozenset()) -> list[Event]:
     present = {rows[0]["entity_id"] for rows in history if rows}
-    return [Event(start, e, "no history recorded (excluded from the recorder, "
-                  "or the entity ID is wrong); its state and attributes are unknown", order=-2)
-            for e in sorted(entities - present)]
+    missing = entities - present
+    events = [Event(start, e, "no history recorded (excluded from the recorder, "
+                    "or the entity ID is wrong); its state and attributes are unknown", order=-2)
+              for e in sorted(missing - related)]
+    if missing & related:
+        events.append(Event(start, "related", "no history recorded for: "
+                            + ", ".join(sorted(missing & related)), order=-2))
+    return events
 
 
 def history_events(history: list[list[dict]], start: datetime, opts: Options,
-                   dropped: Dropped) -> list[Event]:
+                   dropped: Dropped, related: set[str] = frozenset()) -> list[Event]:
     events: list[Event] = []
     for rows in history:
         if not rows:
@@ -144,7 +153,7 @@ def history_events(history: list[list[dict]], start: datetime, opts: Options,
             mine.append(Event(when, entity, text))
             prev_state, prev_attrs = state, kept
 
-        cap = opts.max_changes_per_entity
+        cap = opts.max_changes_related if entity in related else opts.max_changes_per_entity
         if len(mine) > cap:
             head, tail = mine[: cap // 2], mine[-(cap - cap // 2):]
             gap = len(mine) - cap
@@ -371,21 +380,189 @@ def _fold_rejected(events: list[Event], codes: list[str]) -> list[Event]:
     return out
 
 
+ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+SKIP_VARS = {"this", "trigger", "context", "repeat", "wait"}
+_IDENT = re.compile(r"\b([A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)*)")
+
+
+def run_variables(steps: dict[str, list[dict]]) -> dict[str, Any]:
+    """Variables as they stood at the end of a run (changed_variables, merged in order)."""
+    merged: dict[str, Any] = {}
+    for path_steps in steps.values():
+        for step in path_steps:
+            for k, v in (step.get("changed_variables") or {}).items():
+                if k not in SKIP_VARS:
+                    merged[k] = v
+    return merged
+
+
+def used_variables(config: dict[str, Any], names: set[str]) -> tuple[set[str], list[str]]:
+    """Variables the conditions and actions refer to, and the dotted paths they use
+    (e.g. plan.mode). Variables only used to build other variables are left out."""
+    if not config:
+        return set(names), []
+    text = json.dumps([config.get(k) for k in ("conditions", "condition", "actions", "action")])
+    used: set[str] = set()
+    paths: dict[str, None] = {}
+    for m in _IDENT.finditer(text):
+        if m.group(1) in names:
+            used.add(m.group(1))
+            if m.group(2):
+                paths.setdefault(m.group(1) + m.group(2))
+    return used, list(paths)
+
+
+def flatten(value: Any, prefix: str, out: dict[str, str], depth: int = 0,
+            in_item: bool = False) -> None:
+    if isinstance(value, dict) and value and depth < 3:
+        for k, v in value.items():
+            if in_item and v in (None, "", [], {}):
+                continue  # keep per-item lines short; empties rarely matter
+            flatten(v, f"{prefix}.{k}", out, depth + 1, in_item)
+        return
+    # Short lists of records (e.g. one per room) are shown per item, so a
+    # change to one field of one item shows up as a single changed value.
+    if (isinstance(value, list) and 0 < len(value) <= 12 and depth < 3
+            and all(isinstance(v, dict) for v in value)):
+        for i, v in enumerate(value):
+            # Keep the first entity ID (which item this is); drop the rest of the
+            # wiring, which doesn't change between runs.
+            seen_id = False
+            slim = {}
+            for k, fv in v.items():
+                if isinstance(fv, str) and ENTITY_ID.match(fv):
+                    if seen_id:
+                        continue
+                    seen_id = True
+                slim[k] = fv
+            flatten(slim, f"{prefix}[{i}]", out, depth + 1, True)
+        return
+    text = _fmt_value(value)
+    if isinstance(value, list) and len(text) > 120:
+        text = f"[{len(value)} items] " + text
+    out[prefix] = _short(text, 120)
+
+
+def variable_values(variables: dict[str, Any], used: set[str], paths: list[str]) -> dict[str, str]:
+    """Flattened values of the used variables, referenced paths first."""
+    flat: dict[str, str] = {}
+    for name in sorted(used):
+        if name in variables:
+            flatten(variables[name], name, flat)
+
+    def rank(key: str) -> tuple[bool, int]:
+        ref = next((i for i, p in enumerate(paths)
+                    if key == p or key.startswith((p + ".", p + "["))), len(paths))
+        return ("[" in key, ref)
+
+    return {k: flat[k] for k in sorted(flat, key=rank)}
+
+
+_ITEM_KEY = re.compile(r"^(.*\[\d+\])\.(.+)$")
+
+
+def var_lines(values: dict[str, str], previous: dict[str, str] | None, budget: int,
+              head: str | None = None) -> list[str]:
+    """'vars:' lines for a run. Fields of one list item share a line, e.g.
+    'plan.rooms[2]: temp=71.3, demand=neutral'. Later runs list only changes."""
+    if previous is None:
+        entries = [(k, f"={v}") for k, v in values.items()]
+        head = "vars: "
+    else:
+        entries = [(k, f": {previous.get(k, '(unset)')} → {v}")
+                   for k, v in values.items() if previous.get(k) != v]
+        head = head or "vars changed: "
+    if not entries:
+        return []
+
+    groups: list[tuple[str, list[str]]] = []  # (item prefix or "", parts)
+    for key, rest in entries:
+        m = _ITEM_KEY.match(key)
+        prefix, field = (m.group(1), m.group(2)) if m else ("", key)
+        if groups and groups[-1][0] == prefix and prefix:
+            groups[-1][1].append(field + rest)
+        else:
+            groups.append((prefix, [field + rest]))
+
+    lines: list[str] = []
+    last_is_plain = False  # plain values pack together; each list item gets its own line
+    used = 0
+    left_out = 0
+    for prefix, parts in groups:
+        for part in ([", ".join(parts)] if prefix else parts):
+            text = f"{prefix}: {part}" if prefix else part
+            if used + len(text) > budget:
+                left_out += len(parts) if prefix else 1
+                continue
+            used += len(text)
+            if not prefix and last_is_plain and len(lines[-1]) + len(text) + 2 <= 150:
+                lines[-1] += "; " + text
+            else:
+                lines.append(text)
+            last_is_plain = not prefix
+    if not lines:
+        return [head + f"({left_out} values over the size limit)"]
+    if left_out:
+        lines.append(f"… {left_out} more values over the size limit")
+    return [head + lines[0]] + ["  " + ln for ln in lines[1:]]
+
+
+def _duration(seconds: float) -> str:
+    if seconds < 1:
+        return f"{seconds * 1000:.0f}ms"
+    if seconds < 60:
+        return f"{seconds:.0f}s" if seconds >= 10 else f"{seconds:.1f}s"
+    m, sec = divmod(int(seconds), 60)
+    if m < 60:
+        return f"{m}m{sec:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h{m:02d}m"
+
+
+def run_timing(run: dict[str, Any], config: dict[str, Any], until: datetime,
+               opts: Options) -> tuple[str, str | None]:
+    """(' (took 3m12s)', 'slowest step: ...') for a run; empty/None when not worth showing."""
+    begin = _ts(run["timestamp"]["start"])
+    finish = run["timestamp"].get("finish")
+    running = finish is None
+    total = ((_ts(finish) if finish else until) - begin).total_seconds()
+    suffix = (f" (running for at least {_duration(total)})" if running
+              else f" (took {_duration(total)})" if total >= 1 else "")
+    if total < opts.slow_run_seconds:
+        return suffix, None
+    stamps = sorted((_ts(st["timestamp"]), path)
+                    for path, sts in (run.get("trace") or {}).items()
+                    for st in sts if st.get("timestamp"))
+    end_ts = _ts(finish) if finish else until
+    gaps = [(((stamps[i + 1][0] if i + 1 < len(stamps) else end_ts) - ts).total_seconds(), path)
+            for i, (ts, path) in enumerate(stamps)]
+    if not gaps:
+        return suffix, None
+    gap, path = max(gaps)
+    top = "/".join(path.split("/")[:2])
+    label = describe_step(_config_node(config, top))
+    where = f"{path} ({label})" if label else path
+    return suffix, f"slowest step: {where} took {_duration(gap)}"
+
+
 def trace_events(traces: dict[str, Any], start: datetime, end: datetime,
                  opts: Options, dropped: Dropped) -> tuple[list[Event], dict[str, Any]]:
     events: list[Event] = []
     configs: dict[str, Any] = {}
     for entity, info in traces.items():
         seen: dict[tuple, str] = {}  # step signature -> first run id with it
+        prev_vars: dict[str, str] | None = None
         mine: list[Event] = []
         codes: list[str] = []
         runs = info.get("runs", [])
+        recs: list[dict[str, Any]] = []
         for run in runs:
             when = _ts(run["timestamp"]["start"])
             if not (start <= when <= end):
                 dropped.add("traces outside the window")
                 continue
             trig = run.get("trigger") or ""
+            kind = trig or "?"
             steps = run.get("trace") or {}
             trig_steps = next((v for k, v in steps.items() if k.startswith("trigger")), [])
             for tstep in trig_steps:
@@ -394,26 +571,72 @@ def trace_events(traces: dict[str, Any], start: datetime, end: datetime,
                 if fs.get("state") is not None and ts.get("state") is not None:
                     trig += f" ({fs['state']} → {ts['state']})"
                 if not trig and tv.get("description"):
-                    trig = tv["description"]
+                    trig = kind = tv["description"]
             code = _outcome(run)
             outcome = OUTCOMES.get(code, code)
-            run_id = run.get("run_id", "")[:8]
-            text = f"RUN {run_id} trigger: {trig or '?'} → {outcome}"
-            config = run.get("config") or {}
-            detail = step_lines(steps, config)
+            config = run.get("config") or info.get("config") or {}
+            took, slowest = run_timing(run, config, end, opts)
+            steps_detail = step_lines(steps, config)
             if run.get("error"):
-                detail.append(f"error: {_short(str(run['error']))}")
-            signature = (outcome, tuple(detail))
-            if detail and signature in seen:
-                dropped.add("automation runs with the same steps as an earlier run "
-                            "(steps shown once)")
-                detail = [f"(same steps as RUN {seen[signature]})"]
-            else:
-                seen[signature] = run_id
-            mine.append(Event(when, entity, text, detail, order=-1))
-            codes.append(code)
+                steps_detail.append(f"error: {_short(str(run['error']))}")
+            values = None
+            if code not in REJECTED:
+                variables = run_variables(steps)
+                values = variable_values(variables, *used_variables(config, set(variables)))
+            recs.append({"when": when, "run_id": run.get("run_id", "")[:8], "kind": kind,
+                         "text": f"RUN {run.get('run_id', '')[:8]} trigger: {trig or '?'} → {outcome}{took}",
+                         "steps": steps_detail, "sig": (outcome, tuple(steps_detail)),
+                         "code": code, "outcome": outcome, "slowest": slowest, "values": values})
             if opts.include_config and config:
                 configs[entity] = config
+
+        i = 0
+        while i < len(recs):
+            r = recs[i]
+            # Runs that took the same steps back to back fold into one line;
+            # slow runs and rejected triggers are never folded here.
+            j = i
+            if r["code"] not in REJECTED and r["steps"] and not r["slowest"]:
+                while (j + 1 < len(recs) and recs[j + 1]["sig"] == r["sig"]
+                       and not recs[j + 1]["slowest"]):
+                    j += 1
+
+            detail = list(r["steps"])
+            if detail and r["sig"] in seen:
+                dropped.add("automation runs with the same steps as an earlier run "
+                            "(steps shown once)")
+                detail = [f"(same steps as RUN {seen[r['sig']]})"]
+            elif detail:
+                seen[r["sig"]] = r["run_id"]
+            if r["slowest"]:
+                detail.append(r["slowest"])
+            if r["values"] is not None:
+                detail += var_lines(r["values"], prev_vars, opts.max_var_chars)
+                prev_vars = r["values"]
+            mine.append(Event(r["when"], entity, r["text"], detail, order=-1))
+            codes.append(r["code"])
+
+            if j > i:
+                group = recs[i + 1:j + 1]
+                kinds = Counter(g["kind"] for g in group)
+                last = group[-1]
+                text = (f"{len(group)} more runs with the same steps → {r['outcome']}, "
+                        f"until {{t:{last['when'].isoformat()}}}; triggers: "
+                        + ", ".join(f"{k} ×{n}" for k, n in kinds.most_common()))
+                net = var_lines(last["values"], r["values"], opts.max_var_chars // 2,
+                                head="vars, net change over these runs: ")
+                # Values that moved and came back (sensor wobble) are counted, not listed.
+                wobble = {k for g in group for k, v in g["values"].items()
+                          if v != r["values"].get(k)} - {
+                    k for k, v in last["values"].items() if v != r["values"].get(k)}
+                if wobble:
+                    net.append(f"({len(wobble)} other values changed and changed back)")
+                mine.append(Event(group[0]["when"], entity, text, net, order=-1))
+                codes.append("group")
+                dropped.add("automation runs folded into a 'more runs with the same steps' line",
+                            len(group))
+                prev_vars = last["values"]
+            i = j + 1
         folded = _fold_rejected(mine, codes)
         dropped.add("rejected triggers folded into one line", len(mine) - len(folded))
         events.extend(folded)
@@ -571,11 +794,14 @@ def render(meta: dict[str, Any], events: list[Event], configs: dict[str, Any],
     lines = [
         "# Home Assistant timeline",
         f"Window: {start.astimezone(tz):%Y-%m-%d %H:%M:%S} to {end.astimezone(tz):%Y-%m-%d %H:%M:%S} ({zone})",
-        f"Entities: {', '.join(meta['entities'])}",
+        f"Entities: {', '.join(meta.get('requested', meta['entities']))}",
+        *[f"Related to {a} (from its config): {', '.join(ids)}"
+          for a, ids in (meta.get("related") or {}).items() if ids],
         *[f"Note: {n}" for n in meta.get("notes", [])],
         "Format: time, entity, then what happened. 'a → b' is a state change; "
         "values in parentheses are attributes that changed; text in [brackets] is what caused it. "
-        "RUN lines are automation runs, with their steps indented below.",
+        "RUN lines are automation runs, with their steps indented below; 'vars' shows the "
+        "variables the automation's actions use, and later runs list only values that changed.",
         "",
     ]
     if configs:
@@ -623,9 +849,10 @@ def condense(run_dir: Path, opts: Options | None = None) -> str:
             return default
         return p.read_text() if name.endswith(".txt") else json.loads(p.read_text())
 
+    related = {e for ids in (meta.get("related") or {}).values() for e in ids}
     history = load("history.json", [])
-    events = history_events(history, start, opts, dropped)
-    notes = missing_history(history, entities, start)
+    events = history_events(history, start, opts, dropped, related)
+    notes = missing_history(history, entities, start, related)
     tevents, configs = trace_events(load("traces.json", {}), start, end, opts, dropped)
     events += logbook_events(load("logbook.json", []), entities, start, end, events, tevents,
                              opts, dropped)

@@ -22,6 +22,7 @@ new and not yet tried inside Open WebUI. Update this file as the layout changes.
 - `openwebui/ha_timeline_tool.py`: Open WebUI tool (pasted into Open WebUI, which
   installs this package from GitHub). It must stay a single file that imports
   `ha_llm_context`; keep logic in the package, not here. Settings are Valves.
+- `tests/test_traces.py`: automation variables, run timing, related entities
 - `tests/fixtures/run1/`: an invented run (hallway motion light blocked by a
   lux condition). Extend it, or add new invented runs, instead of using real pulls.
 

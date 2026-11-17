@@ -44,7 +44,9 @@ Ask the way you'd describe the problem to a person:
 > hours?
 
 The model should look up the entity IDs, pull a timeline, and answer from it.
-You can follow up in the same chat. For example, ask it to widen the window to
+Naming just the automation is enough. Its runs, its variables, and the
+entities its config refers to are all included. You can follow up in the same
+chat. For example, ask it to widen the window to
 `6h` and it will pull again.
 
 **Small models:** tool calling is where small local models struggle most.

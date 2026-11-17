@@ -1,7 +1,7 @@
 """
 title: Home Assistant Timeline
 description: Read-only troubleshooting for Home Assistant. Finds entities and returns a condensed timeline of state changes, automation runs, logbook entries, and errors for the model to reason over.
-version: 0.1.0
+version: 0.2.0
 license: MIT
 requirements: ha-llm-context @ https://github.com/mikepell007/ha-llm-context/archive/refs/heads/main.zip
 """
@@ -37,6 +37,8 @@ class Tools:
         timezone: str = Field("", description="Display time zone, e.g. America/New_York. Empty uses the server's, which in Docker is usually UTC.")
         keep_raw: bool = Field(True, description="Keep each raw pull and its timeline on disk")
         out_dir: str = Field("/app/backend/data/ha-llm-context", description="Where raw pulls are kept when keep_raw is on")
+        include_related: bool = Field(True, description="Also pull entities that a requested automation's config refers to")
+        max_related: int = Field(30, description="Most related entities to add per pull")
         max_changes_per_entity: int = Field(40, description="Busy entities beyond this keep only their first and last changes")
         max_errors: int = Field(30, description="Unique error-log messages to include")
         include_config: bool = Field(True, description="Include automation configs under 2000 characters")
@@ -97,7 +99,7 @@ class Tools:
         state and attribute changes, automation runs with each step's result,
         logbook entries, and warnings and errors from the log. Use it to explain
         why an automation or device did or didn't do something.
-        :param entity_ids: Comma-separated entity IDs, e.g. "automation.porch_light, light.porch". Include the automation itself to get its run traces.
+        :param entity_ids: Comma-separated entity IDs, e.g. "automation.porch_light". Giving just the automation is usually enough: its runs, variables, and the entities its config refers to are included.
         :param since: Start of the window: "30m", "2h", "1d", or an ISO time. Defaults to "2h".
         :param until: End of the window in the same formats. Empty means now.
         :return: The timeline text, ending with a list of what was left out.
@@ -115,7 +117,8 @@ class Tools:
         out_root = Path(self.valves.out_dir) if self.valves.keep_raw else None
         try:
             result = await asyncio.to_thread(
-                pull_timeline, settings, entities, since, until, out_root, options)
+                pull_timeline, settings, entities, since, until, out_root, options,
+                self.valves.include_related, self.valves.max_related)
         except Exception as err:
             await _status(__event_emitter__, "Home Assistant pull failed", done=True)
             return f"Error pulling from Home Assistant: {err}"

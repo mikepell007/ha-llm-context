@@ -78,7 +78,8 @@ class TimelineResult:
 
 def pull_timeline(settings: HASettings, entities: list[str], since: str = "2h",
                   until: str = "", out_root: Path | None = None,
-                  options: Options | None = None) -> TimelineResult:
+                  options: Options | None = None, related: bool = True,
+                  max_related: int = 30) -> TimelineResult:
     """Collect a window from HA and condense it.
 
     With out_root, the raw pull and timeline.txt are kept in a new run
@@ -93,10 +94,12 @@ def pull_timeline(settings: HASettings, entities: list[str], since: str = "2h",
 
     if out_root is None:
         with tempfile.TemporaryDirectory(prefix="ha-llm-context-") as tmp:
-            run_dir = collect(settings, entities, start, end, Path(tmp) / stamp)
+            run_dir = collect(settings, entities, start, end, Path(tmp) / stamp,
+                              related=related, max_related=max_related)
             return TimelineResult(condense(run_dir, options), None)
 
-    run_dir = collect(settings, entities, start, end, out_root / stamp)
+    run_dir = collect(settings, entities, start, end, out_root / stamp,
+                      related=related, max_related=max_related)
     timeline = condense(run_dir, options)
     (run_dir / "timeline.txt").write_text(timeline)
     return TimelineResult(timeline, run_dir)

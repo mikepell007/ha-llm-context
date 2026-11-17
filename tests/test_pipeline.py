@@ -40,7 +40,7 @@ def test_match_entities_by_name_or_id_and_domain():
     assert "and 2 more" in format_matches(hits, total)
 
 
-def _fake_collect(settings, entities, start, end, out_dir):
+def _fake_collect(settings, entities, start, end, out_dir, **kwargs):
     shutil.copytree(FIXTURE, out_dir)
     return out_dir
 
@@ -57,7 +57,7 @@ def test_pull_timeline_keeps_raw_when_asked(tmp_path, monkeypatch):
 def test_pull_timeline_without_out_root_leaves_nothing(monkeypatch):
     seen = {}
 
-    def collect(settings, entities, start, end, out_dir):
+    def collect(settings, entities, start, end, out_dir, **kwargs):
         seen["dir"] = out_dir
         return _fake_collect(settings, entities, start, end, out_dir)
 

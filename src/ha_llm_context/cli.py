@@ -21,6 +21,9 @@ def _add_collect_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--since", default="2h", help="window start: 30m, 2h, 1d, or ISO time (default 2h)")
     p.add_argument("--until", default=None, help="window end: same formats (default now)")
     p.add_argument("--out", type=Path, default=None, help="run directory (default out/<timestamp>)")
+    p.add_argument("--no-related", action="store_true",
+                   help="don't add entities that the automations' configs refer to")
+    p.add_argument("--max-related", type=int, default=30, help="related entities to add (default 30)")
 
 
 def _add_condense_args(p: argparse.ArgumentParser) -> None:
@@ -57,7 +60,8 @@ def _do_collect(args: argparse.Namespace) -> Path:
     end = parse_when(args.until) if args.until else datetime.now().astimezone()
     start = parse_when(args.since, now=end)
     out = args.out or Path("out") / datetime.now().strftime("%Y%m%d-%H%M%S")
-    collect(HASettings.from_env(), args.entity, start, end, out)
+    collect(HASettings.from_env(), args.entity, start, end, out,
+            related=not args.no_related, max_related=args.max_related)
     print(f"Collected into {out}", file=sys.stderr)
     return out
 
