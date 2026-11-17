@@ -70,5 +70,16 @@ chat. For example, ask it to widen the window to
 
 The `requirements:` line is installed once. To pick up new code:
 1. Bump `version` in `pyproject.toml` and push.
-2. Reinstall: `docker exec open-webui pip install --force-reinstall --no-deps <URL from the requirements line>`.
-3. Restart Open WebUI.
+2. Reinstall and restart. `open-webui` is the usual container name; check
+   yours with `docker ps`:
+
+   ```sh
+   docker exec open-webui pip install --force-reinstall --no-deps \
+     "https://github.com/mikepell007/ha-llm-context/archive/refs/heads/main.zip"
+   docker restart open-webui
+   ```
+
+   That URL is the one in the tool file's `requirements:` line. It installs
+   whatever is on `main` on GitHub, so push before you reinstall.
+3. If the tool file itself changed (new valves or parameters), paste it into
+   Open WebUI again too.
