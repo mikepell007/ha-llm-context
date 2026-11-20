@@ -56,6 +56,19 @@ chat. For example, ask it to widen the window to
 - You can also skip the search step by giving the exact IDs:
   "Get the timeline for automation.x and climate.y over the last 2h."
 
+**It can't create Home Assistant automations.** If you ask for a new or
+changed automation, a good model writes the YAML in its reply for you to paste
+into Home Assistant. A model may instead grab another tool that has
+"automation" in its name, such as Open WebUI's own scheduled automations,
+which run chat prompts on a timer and have nothing to do with Home Assistant.
+Then it may tell you it created a Home Assistant automation when it didn't.
+To avoid that:
+
+- Turn off Open WebUI's automation or scheduling tools for the model you use
+  with this tool.
+- Ask for YAML explicitly: "Write the Home Assistant automation YAML for ...".
+- Check the result in Home Assistant itself, not in the chat.
+
 ## Data and safety
 
 - The tool only reads from Home Assistant. It never calls services or writes

@@ -1,7 +1,7 @@
 """
 title: Home Assistant Timeline
-description: Read-only troubleshooting for Home Assistant. Finds entities and returns a condensed timeline of state changes, automation runs, logbook entries, and errors for the model to reason over.
-version: 0.2.0
+description: Read-only troubleshooting for Home Assistant. Finds entities and returns a condensed timeline of state changes, automation runs, logbook entries, and errors. It cannot create, change, or run Home Assistant automations or devices.
+version: 0.2.1
 license: MIT
 requirements: ha-llm-context @ https://github.com/mikepell007/ha-llm-context/archive/refs/heads/main.zip
 """
@@ -74,7 +74,8 @@ class Tools:
         """
         Search Home Assistant entities by words in their entity ID or friendly name.
         Use this first when the user describes a device or automation in words
-        and you need its exact entity ID.
+        and you need its exact entity ID. Read-only: it cannot create or change
+        anything in Home Assistant.
         :param query: Words that must all appear, e.g. "office climate" or "porch motion".
         :param domain: Optional domain to limit the search, e.g. "automation", "climate", "light".
         :return: One line per match: entity ID, friendly name, and current state.
@@ -99,6 +100,12 @@ class Tools:
         state and attribute changes, automation runs with each step's result,
         logbook entries, and warnings and errors from the log. Use it to explain
         why an automation or device did or didn't do something.
+        Read-only: it cannot create, edit, enable, or trigger Home Assistant
+        automations, and it cannot control devices. If the user asks for a new
+        or changed Home Assistant automation, write the YAML in your reply for
+        them to paste into Home Assistant. Do not use other tools (such as
+        scheduled tasks or "automations" in this chat app) for that: they are
+        not Home Assistant.
         :param entity_ids: Comma-separated entity IDs, e.g. "automation.porch_light". Giving just the automation is usually enough: its runs, variables, and the entities its config refers to are included.
         :param since: Start of the window: "30m", "2h", "1d", or an ISO time. Defaults to "2h".
         :param until: End of the window in the same formats. Empty means now.
