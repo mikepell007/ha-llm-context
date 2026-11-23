@@ -66,11 +66,17 @@ net change in each variable across them. Use `--attr NAME` to keep extra attribu
 defaults, and `--tz` to choose the display time zone. The timeline ends with a
 "Dropped" section that counts everything left out.
 
-## Open WebUI
+## Chat clients: MCP server and Open WebUI tool
 
-To use this from a chat instead of the terminal, see
-[openwebui/README.md](openwebui/README.md). It adds a tool that lets the model
-look up entities and pull timelines itself.
+To use this from a chat instead of the terminal, the model can look up
+entities and pull timelines itself through two read-only tools. They're
+available two ways, with the same tools and descriptions:
+
+- **MCP server** (`ha-llm-context mcp`): works with any MCP client, including
+  Open WebUI and LM Studio. It runs as a small service or is started by the
+  client. See [mcp/README.md](mcp/README.md).
+- **Open WebUI tool**: a single file you paste into Open WebUI. See
+  [openwebui/README.md](openwebui/README.md).
 
 ## Tips
 

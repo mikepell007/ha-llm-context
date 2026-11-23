@@ -1,6 +1,6 @@
 [project]
 name = "ha-llm-context"
-version = "0.2.1"
+version = "0.3.0"
 description = "Condense Home Assistant traces, history, logbook, and errors into a timeline for a local LLM."
 readme = "README.md"
 license = "MIT"
@@ -11,7 +11,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8", "pydantic>=2"]  # pydantic: only to test the Open WebUI tool
+test = ["pytest>=8", "pydantic>=2", "mcp>=2,<3"]
+mcp = ["mcp>=2,<3"]
 
 [project.scripts]
 ha-llm-context = "ha_llm_context.cli:main"

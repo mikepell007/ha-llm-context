@@ -1,7 +1,7 @@
 """
 title: Home Assistant Timeline
 description: Read-only troubleshooting for Home Assistant. Finds entities and returns a condensed timeline of state changes, automation runs, logbook entries, and errors. It cannot create, change, or run Home Assistant automations or devices.
-version: 0.2.1
+version: 0.3.0
 license: MIT
 requirements: ha-llm-context @ https://github.com/mikepell007/ha-llm-context/archive/refs/heads/main.zip
 """
@@ -56,17 +56,25 @@ class Tools:
                              "An admin sets them under Workspace > Tools > Home Assistant Timeline.")
         return HASettings(self.valves.ha_url.rstrip("/"), self.valves.ha_token)
 
-    def _options(self):
+    def _config(self):
         from ha_llm_context.condense import Options
+        from ha_llm_context.tools import ToolConfig
 
         v = self.valves
-        return Options(
+        options = Options(
             tz=ZoneInfo(v.timezone) if v.timezone else None,
             extra_attrs=tuple(a.strip() for a in v.extra_attributes.split(",") if a.strip()),
             max_changes_per_entity=v.max_changes_per_entity,
             max_errors=v.max_errors,
             include_config=v.include_config,
         )
+        return ToolConfig(self._settings(), options,
+                          Path(v.out_dir) if v.keep_raw else None,
+                          v.include_related, v.max_related, v.warn_tokens)
+
+    # The docstrings below are what the model reads. They must match
+    # ha_llm_context/tools.py, which the MCP server uses;
+    # tests/test_tool_parity.py checks that they do.
 
     async def find_home_assistant_entities(
         self, query: str, domain: str = "", __event_emitter__: Emitter = None
@@ -80,16 +88,17 @@ class Tools:
         :param domain: Optional domain to limit the search, e.g. "automation", "climate", "light".
         :return: One line per match: entity ID, friendly name, and current state.
         """
-        from ha_llm_context.pipeline import find_entities
+        from ha_llm_context import tools
 
-        await _status(__event_emitter__, f"Searching Home Assistant for '{query}'")
         try:
-            result = await asyncio.to_thread(find_entities, self._settings(), query, domain)
-        except Exception as err:  # report to the model instead of failing the chat
-            await _status(__event_emitter__, "Entity search failed", done=True)
-            return f"Error searching entities: {err}"
-        await _status(__event_emitter__, "Entity search done", done=True)
-        return result
+            cfg = self._config()
+        except Exception as err:
+            return f"Error: {err}"
+        await _status(__event_emitter__, f"Searching Home Assistant for '{query}'")
+        out = await asyncio.to_thread(tools.find, cfg, query, domain)
+        await _status(__event_emitter__,
+                      "Entity search done" if out.ok else "Entity search failed", done=True)
+        return out.text
 
     async def get_home_assistant_timeline(
         self, entity_ids: str, since: str = "2h", until: str = "",
@@ -111,29 +120,18 @@ class Tools:
         :param until: End of the window in the same formats. Empty means now.
         :return: The timeline text, ending with a list of what was left out.
         """
-        from ha_llm_context.ask import estimate_tokens
-        from ha_llm_context.pipeline import parse_entity_ids, pull_timeline
+        from ha_llm_context import tools
 
         try:
-            entities = parse_entity_ids(entity_ids)
-            settings, options = self._settings(), self._options()
+            cfg = self._config()
         except Exception as err:
             return f"Error: {err}"
-
-        await _status(__event_emitter__, f"Pulling {len(entities)} entities from Home Assistant ({since})")
-        out_root = Path(self.valves.out_dir) if self.valves.keep_raw else None
-        try:
-            result = await asyncio.to_thread(
-                pull_timeline, settings, entities, since, until, out_root, options,
-                self.valves.include_related, self.valves.max_related)
-        except Exception as err:
-            await _status(__event_emitter__, "Home Assistant pull failed", done=True)
-            return f"Error pulling from Home Assistant: {err}"
-
-        tokens = estimate_tokens(result.timeline)
-        await _status(__event_emitter__, f"Timeline ready (~{tokens} tokens)", done=True)
-        if tokens > self.valves.warn_tokens:
-            return (f"Note: this timeline is about {tokens} tokens, which may exceed your "
-                    "context window. A shorter window or fewer entities would help.\n\n"
-                    + result.timeline)
-        return result.timeline
+        n = tools.count_entities(entity_ids)
+        if n:
+            await _status(__event_emitter__, f"Pulling {n} entities from Home Assistant ({since})")
+        out = await asyncio.to_thread(tools.timeline, cfg, entity_ids, since, until)
+        if n:
+            await _status(__event_emitter__,
+                          f"Timeline ready (~{out.tokens} tokens)" if out.ok
+                          else "Home Assistant pull failed", done=True)
+        return out.text

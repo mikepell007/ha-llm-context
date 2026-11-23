@@ -1,0 +1,17 @@
+# Runs the MCP server as a service. Builds straight from GitHub, so no clone is
+# needed: `docker compose -f compose.yaml up -d --build` from this file's folder.
+#
+# Put HA_URL, HA_TOKEN and MCP_TOKEN in a .env file next to this one (see
+# mcp/README.md). Never put them in this file.
+services:
+  ha-llm-context:
+    build: https://github.com/mikepell007/ha-llm-context.git#main
+    container_name: ha-llm-context
+    restart: unless-stopped
+    environment:
+      HA_URL: ${HA_URL}
+      HA_TOKEN: ${HA_TOKEN}
+      MCP_TOKEN: ${MCP_TOKEN}
+    command: ["--tz", "${HA_TIMEZONE:-UTC}"]
+    ports:
+      - "8765:8765"

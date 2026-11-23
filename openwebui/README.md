@@ -8,6 +8,10 @@ read-only tools:
 - **get_home_assistant_timeline**: pulls and condenses a time window for a list
   of entities. The result is the same timeline the CLI writes to `timeline.txt`.
 
+The same tools are also available from the [MCP server](../mcp/README.md),
+which runs outside Open WebUI and works with other clients too. Use one or the
+other for a model, not both.
+
 The model reasons over the timeline in the chat, so this replaces the CLI's
 `ask` step. Open WebUI's own model connection is used, so `LLM_*` settings
 aren't needed here.

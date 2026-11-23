@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from .collect import collect
 from .condense import Options, condense
 from .config import HASettings, LLMSettings, load_dotenv, parse_when
 from .pipeline import find_entities
+from .tools import DEFAULT_MAX_RELATED, DEFAULT_WARN_TOKENS, ToolConfig
 
 
 def _add_collect_args(p: argparse.ArgumentParser) -> None:
@@ -83,6 +85,15 @@ def _do_ask(timeline: str, args: argparse.Namespace) -> None:
     print(ask_mod.ask(LLMSettings.from_env(), messages))
 
 
+def _do_mcp(args: argparse.Namespace) -> None:
+    from .mcp_server import serve
+
+    cfg = ToolConfig(HASettings.from_env(), _options(args), args.keep_raw,
+                     not args.no_related, args.max_related, args.warn_tokens)
+    serve(cfg, http=args.http, host=args.host, port=args.port,
+          token=os.environ.get("MCP_TOKEN", ""))
+
+
 def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(prog="ha-llm-context", description=__doc__)
@@ -109,6 +120,22 @@ def main(argv: list[str] | None = None) -> None:
     _add_condense_args(p)
     _add_ask_args(p, required=False)
 
+    p = sub.add_parser("mcp", help="run as an MCP server (stdio, or --http for a service)")
+    p.add_argument("--http", action="store_true",
+                   help="serve streamable HTTP at /mcp instead of stdio")
+    p.add_argument("--host", default="127.0.0.1",
+                   help="HTTP listen address (default 127.0.0.1; 0.0.0.0 in a container)")
+    p.add_argument("--port", type=int, default=8765, help="HTTP port (default 8765)")
+    p.add_argument("--keep-raw", type=Path, default=None, metavar="DIR",
+                   help="keep each raw pull and its timeline under DIR (default: keep nothing)")
+    p.add_argument("--no-related", action="store_true",
+                   help="don't add entities that the automations' configs refer to")
+    p.add_argument("--max-related", type=int, default=DEFAULT_MAX_RELATED,
+                   help=f"related entities to add (default {DEFAULT_MAX_RELATED})")
+    p.add_argument("--warn-tokens", type=int, default=DEFAULT_WARN_TOKENS,
+                   help=f"warn the model above this many tokens (default {DEFAULT_WARN_TOKENS})")
+    _add_condense_args(p)
+
     args = parser.parse_args(argv)
     if args.cmd == "find":
         print(find_entities(HASettings.from_env(), " ".join(args.query), args.domain))
@@ -121,6 +148,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cmd == "ask":
         src = args.source / "timeline.txt" if args.source.is_dir() else args.source
         _do_ask(src.read_text(), args)
+    elif args.cmd == "mcp":
+        _do_mcp(args)
     elif args.cmd == "run":
         run_dir = _do_collect(args)
         timeline = _do_condense(run_dir, args)
