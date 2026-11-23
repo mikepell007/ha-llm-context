@@ -31,7 +31,7 @@ Everything stays local: your HA instance, your machine, your model.
 ## Requirements
 
 - Home Assistant with a long-lived access token (Profile → Security)
-- Python 3.12+
+- Python 3.11+
 - A local model served behind an OpenAI-compatible API
 
 ## Usage

@@ -59,7 +59,7 @@ Dev setup: `python3 -m venv .venv && .venv/bin/pip install -e '.[test]' && .venv
 
 ## Conventions
 
-- Python 3.12+. Keep dependencies few: an HTTP client and a WebSocket client.
+- Python 3.11+ (Open WebUI's Docker image runs 3.11). Keep dependencies few: an HTTP client and a WebSocket client.
 - Tests must not need a live HA instance or a model. Use recorded or invented
   fixtures.
 - MIT licensed (`LICENSE`).
