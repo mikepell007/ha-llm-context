@@ -30,7 +30,7 @@ def _text(result) -> str:
 
 def test_tools_are_marked_read_only():
     listed = asyncio.run(build_server(_cfg()).list_tools())
-    assert {t.name for t in listed} == {tools.FIND_NAME, tools.TIMELINE_NAME}
+    assert {t.name for t in listed} == {tools.FIND_NAME, tools.REFS_NAME, tools.TIMELINE_NAME}
     for t in listed:
         assert t.annotations.read_only_hint is True
         assert t.annotations.destructive_hint is False

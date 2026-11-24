@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import pipeline
+from . import pipeline, references
 from .ask import estimate_tokens
 from .condense import Options
 from .config import HASettings
@@ -37,6 +37,23 @@ FIND_PARAMS = {
     "domain": 'Optional domain to limit the search, e.g. "automation", "climate", "light".',
 }
 FIND_RETURNS = "One line per match: entity ID, friendly name, and current state."
+
+REFS_NAME = "find_home_assistant_references"
+REFS_DESCRIPTION = (
+    "Find everything in Home Assistant that refers to one entity: automations "
+    "and scripts (including references inside templates and variables), "
+    "scenes, groups, and its device, area and integration. Use it when the user "
+    "asks where an entity is used, what would be affected by changing or "
+    "removing it, or which automations might have changed it. Read-only: it "
+    "cannot create or change anything in Home Assistant."
+)
+REFS_PARAMS = {
+    "entity_id": 'One exact entity ID, e.g. "sensor.office_temperature". Use '
+                 "find_home_assistant_entities first if you only have a name.",
+}
+REFS_RETURNS = ("Each automation and script that refers to the entity and where "
+                "(trigger, condition, action, template), then other related items, "
+                "then what was and wasn't searched.")
 
 TIMELINE_NAME = "get_home_assistant_timeline"
 TIMELINE_DESCRIPTION = (
@@ -92,6 +109,20 @@ def find(cfg: ToolConfig, query: str, domain: str = "") -> ToolOutput:
         text = pipeline.find_entities(cfg.settings, query, domain)
     except Exception as err:  # reported to the model, see module docstring
         return ToolOutput(f"Error searching entities: {err}", False)
+    return ToolOutput(text, True)
+
+
+def find_references(cfg: ToolConfig, entity_id: str) -> ToolOutput:
+    try:
+        ids = pipeline.parse_entity_ids(entity_id)
+    except ValueError as err:
+        return ToolOutput(f"Error: {err}", False)
+    if len(ids) != 1:
+        return ToolOutput("Error: give one entity ID at a time.", False)
+    try:
+        text = references.find_references(cfg.settings, ids[0])
+    except Exception as err:
+        return ToolOutput(f"Error searching references: {err}", False)
     return ToolOutput(text, True)
 
 

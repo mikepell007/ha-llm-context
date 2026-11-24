@@ -52,6 +52,13 @@ ha-llm-context condense out/<timestamp> --print          # writes timeline.txt
 ha-llm-context ask out/<timestamp> -q "..."              # uses timeline.txt
 ```
 
+To see everything that refers to an entity (automations and scripts,
+including inside templates, plus scenes, groups, its device and area):
+
+```sh
+ha-llm-context refs sensor.office_temperature
+```
+
 Any `automation.*` entity you pass also pulls that automation's traces from
 the window, plus the entities its config refers to (sensors, helpers, the
 devices it controls), so naming the automation is usually enough. Use
@@ -70,7 +77,8 @@ defaults, and `--tz` to choose the display time zone. The timeline ends with a
 ## Chat clients: MCP server and Open WebUI tool
 
 To use this from a chat instead of the terminal, the model can look up
-entities and pull timelines itself through two read-only tools. They're
+entities, find what refers to them, and pull timelines itself through three
+read-only tools. They're
 available two ways, with the same tools and descriptions:
 
 - **MCP server** (`ha-llm-context mcp`): works with any MCP client, including

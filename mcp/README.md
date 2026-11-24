@@ -1,11 +1,14 @@
 # MCP server
 
-`ha-llm-context mcp` serves the same two read-only tools as the
+`ha-llm-context mcp` serves the same three read-only tools as the
 [Open WebUI tool](../openwebui/README.md) over the Model Context Protocol, so
 any MCP client can use them:
 
 - **find_home_assistant_entities**: looks up entity IDs from words like
   "office climate".
+- **find_home_assistant_references**: lists the automations, scripts, scenes,
+  groups, device and area that refer to one entity, including references
+  inside templates. The same as `ha-llm-context refs`.
 - **get_home_assistant_timeline**: pulls and condenses a time window. It
   returns the same timeline the CLI writes to `timeline.txt`.
 

@@ -1,7 +1,7 @@
 """
 title: Home Assistant Timeline
-description: Read-only troubleshooting for Home Assistant. Finds entities and returns a condensed timeline of state changes, automation runs, logbook entries, and errors. It cannot create, change, or run Home Assistant automations or devices.
-version: 0.3.0
+description: Read-only troubleshooting for Home Assistant. Finds entities, lists everything that refers to an entity, and returns a condensed timeline of state changes, automation runs, logbook entries, and errors. It cannot create, change, or run Home Assistant automations or devices.
+version: 0.4.0
 license: MIT
 requirements: ha-llm-context @ https://github.com/mikepell007/ha-llm-context/archive/refs/heads/main.zip
 """
@@ -98,6 +98,31 @@ class Tools:
         out = await asyncio.to_thread(tools.find, cfg, query, domain)
         await _status(__event_emitter__,
                       "Entity search done" if out.ok else "Entity search failed", done=True)
+        return out.text
+
+    async def find_home_assistant_references(
+        self, entity_id: str, __event_emitter__: Emitter = None
+    ) -> str:
+        """
+        Find everything in Home Assistant that refers to one entity: automations
+        and scripts (including references inside templates and variables),
+        scenes, groups, and its device, area and integration. Use it when the user
+        asks where an entity is used, what would be affected by changing or
+        removing it, or which automations might have changed it. Read-only: it
+        cannot create or change anything in Home Assistant.
+        :param entity_id: One exact entity ID, e.g. "sensor.office_temperature". Use find_home_assistant_entities first if you only have a name.
+        :return: Each automation and script that refers to the entity and where (trigger, condition, action, template), then other related items, then what was and wasn't searched.
+        """
+        from ha_llm_context import tools
+
+        try:
+            cfg = self._config()
+        except Exception as err:
+            return f"Error: {err}"
+        await _status(__event_emitter__, f"Searching Home Assistant for references to {entity_id}")
+        out = await asyncio.to_thread(tools.find_references, cfg, entity_id)
+        await _status(__event_emitter__,
+                      "Reference search done" if out.ok else "Reference search failed", done=True)
         return out.text
 
     async def get_home_assistant_timeline(

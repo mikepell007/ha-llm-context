@@ -20,12 +20,15 @@ mcpo. Update this file as the layout changes.
 - `src/ha_llm_context/ask.py`: prompt building and the `/chat/completions` call
 - `src/ha_llm_context/pipeline.py`: entity search and collect-then-condense in one
   call; used by the CLI and by `tools.py`
-- `src/ha_llm_context/tools.py`: the two model-facing tools (names, descriptions,
+- `src/ha_llm_context/references.py`: what refers to one entity: HA's
+  `search/related` plus a scan of every automation and script config (which
+  also catches templates); fetch and render are separate so tests need no HA
+- `src/ha_llm_context/tools.py`: the three model-facing tools (names, descriptions,
   parameter text, defaults, error handling) shared by both front ends below
 - `src/ha_llm_context/mcp_server.py`: MCP server (stdio, or streamable HTTP at
   `/mcp` with an optional bearer token from `MCP_TOKEN`); needs the `mcp` extra.
   It targets MCP SDK 2.x, where `FastMCP` is `mcp.server.mcpserver.MCPServer`.
-- `src/ha_llm_context/cli.py`: `find`, `collect`, `condense`, `ask`, `run`, `mcp` subcommands
+- `src/ha_llm_context/cli.py`: `find`, `refs`, `collect`, `condense`, `ask`, `run`, `mcp` subcommands
 - `openwebui/ha_timeline_tool.py`: Open WebUI tool (pasted into Open WebUI, which
   installs this package from GitHub). It must stay a single file that imports
   `ha_llm_context`; keep logic in the package, not here. Settings are Valves.
@@ -38,6 +41,7 @@ mcpo. Update this file as the layout changes.
   fails until they match.
 - `tests/test_traces.py`: automation variables, run timing, related entities
 - `tests/test_mcp_server.py`, `tests/test_tool_parity.py`: MCP server and parity
+- `tests/test_references.py`: reference search on invented configs
 - `tests/fixtures/run1/`: an invented run (hallway motion light blocked by a
   lux condition). Extend it, or add new invented runs, instead of using real pulls.
 

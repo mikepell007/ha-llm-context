@@ -1,4 +1,4 @@
-"""MCP server exposing the same two read-only tools as the Open WebUI tool.
+"""MCP server exposing the same read-only tools as the Open WebUI tool.
 
 Run with `ha-llm-context mcp` (stdio, for clients that start the server
 themselves) or `ha-llm-context mcp --http` (a long-running service that
@@ -20,7 +20,7 @@ from . import tools
 
 
 def build_server(cfg: tools.ToolConfig) -> Any:
-    """An MCPServer with the two tools registered against `cfg`."""
+    """An MCPServer with the tools registered against `cfg`."""
     from mcp.server.mcpserver import MCPServer
     from mcp.types import ToolAnnotations
 
@@ -28,7 +28,8 @@ def build_server(cfg: tools.ToolConfig) -> Any:
         name="ha-llm-context",
         instructions=(
             "Read-only Home Assistant troubleshooting. Find entity IDs, then get a "
-            "condensed timeline and explain from it what happened and why. "
+            "condensed timeline and explain from it what happened and why, or list "
+            "everything that refers to an entity. "
             "These tools cannot change Home Assistant."
         ),
     )
@@ -41,6 +42,11 @@ def build_server(cfg: tools.ToolConfig) -> Any:
     ) -> str:
         return tools.find(cfg, query, domain).text
 
+    def find_home_assistant_references(
+        entity_id: Annotated[str, Field(description=tools.REFS_PARAMS["entity_id"])],
+    ) -> str:
+        return tools.find_references(cfg, entity_id).text
+
     def get_home_assistant_timeline(
         entity_ids: Annotated[str, Field(description=tools.TIMELINE_PARAMS["entity_ids"])],
         since: Annotated[str, Field(description=tools.TIMELINE_PARAMS["since"])] = tools.DEFAULT_SINCE,
@@ -50,6 +56,9 @@ def build_server(cfg: tools.ToolConfig) -> Any:
 
     server.add_tool(find_home_assistant_entities, name=tools.FIND_NAME,
                     description=f"{tools.FIND_DESCRIPTION} Returns: {tools.FIND_RETURNS}",
+                    annotations=read_only, structured_output=False)
+    server.add_tool(find_home_assistant_references, name=tools.REFS_NAME,
+                    description=f"{tools.REFS_DESCRIPTION} Returns: {tools.REFS_RETURNS}",
                     annotations=read_only, structured_output=False)
     server.add_tool(get_home_assistant_timeline, name=tools.TIMELINE_NAME,
                     description=f"{tools.TIMELINE_DESCRIPTION} Returns: {tools.TIMELINE_RETURNS}",

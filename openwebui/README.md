@@ -1,10 +1,13 @@
 # Open WebUI tool
 
-[`ha_timeline_tool.py`](ha_timeline_tool.py) gives a chat model in Open WebUI two
+[`ha_timeline_tool.py`](ha_timeline_tool.py) gives a chat model in Open WebUI three
 read-only tools:
 
 - **find_home_assistant_entities**: looks up entity IDs from words like
   "office climate".
+- **find_home_assistant_references**: lists what refers to one entity:
+  automations and scripts (including inside templates), scenes, groups, and
+  its device and area.
 - **get_home_assistant_timeline**: pulls and condenses a time window for a list
   of entities. The result is the same timeline the CLI writes to `timeline.txt`.
 

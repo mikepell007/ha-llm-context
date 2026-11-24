@@ -14,6 +14,7 @@ from .collect import collect
 from .condense import Options, condense
 from .config import HASettings, LLMSettings, load_dotenv, parse_when
 from .pipeline import find_entities
+from .references import find_references
 from .tools import DEFAULT_MAX_RELATED, DEFAULT_WARN_TOKENS, ToolConfig
 
 
@@ -103,6 +104,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("query", nargs="+", help="words that must all appear, e.g. office climate")
     p.add_argument("--domain", default="", help="only this domain, e.g. climate")
 
+    p = sub.add_parser("refs", help="list automations, scripts, scenes, etc. that refer to an entity")
+    p.add_argument("entity_id", help="exact entity ID, e.g. sensor.office_temperature")
+
     p = sub.add_parser("collect", help="pull raw data from Home Assistant")
     _add_collect_args(p)
 
@@ -139,6 +143,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.cmd == "find":
         print(find_entities(HASettings.from_env(), " ".join(args.query), args.domain))
+    elif args.cmd == "refs":
+        print(find_references(HASettings.from_env(), args.entity_id.strip().lower()), end="")
     elif args.cmd == "collect":
         print(_do_collect(args))
     elif args.cmd == "condense":

@@ -25,6 +25,7 @@ TOOL = Path(__file__).parent.parent / "openwebui" / "ha_timeline_tool.py"
 
 SHARED = {
     tools.FIND_NAME: (tools.FIND_DESCRIPTION, tools.FIND_PARAMS, tools.FIND_RETURNS),
+    tools.REFS_NAME: (tools.REFS_DESCRIPTION, tools.REFS_PARAMS, tools.REFS_RETURNS),
     tools.TIMELINE_NAME: (tools.TIMELINE_DESCRIPTION, tools.TIMELINE_PARAMS, tools.TIMELINE_RETURNS),
 }
 

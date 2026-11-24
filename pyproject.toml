@@ -1,6 +1,6 @@
 [project]
 name = "ha-llm-context"
-version = "0.3.0"
+version = "0.4.0"
 description = "Condense Home Assistant traces, history, logbook, and errors into a timeline for a local LLM."
 readme = "README.md"
 license = "MIT"
