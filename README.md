@@ -3,8 +3,9 @@
 Pull Home Assistant traces, history, logbook entries, and errors; condense them into
 a short per-entity timeline; and ask a local LLM what went wrong.
 
-> **Status: early.** All three stages work against invented test data but
-> haven't been tested much against a live instance yet.
+> **Status: early but working.** The CLI, the Open WebUI tool and the MCP
+> server all run against a live Home Assistant. Expect rough edges with
+> integrations and traces it hasn't seen yet.
 
 ## Why
 

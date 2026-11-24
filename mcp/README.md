@@ -23,6 +23,10 @@ Both tools are marked read-only. They never call services or write state.
 Both read `HA_URL` and `HA_TOKEN`. The model connection belongs to the client,
 so the `LLM_*` settings aren't used.
 
+**The HTTP address always ends in `/mcp`**, for example
+`http://192.168.1.20:8765/mcp`. Without the path, the server answers 404, and
+most clients report that only as "can't connect".
+
 ### As a service in Docker (for Open WebUI)
 
 The image builds straight from GitHub, so you only need two files on the PC
@@ -65,6 +69,77 @@ MCP support need the `mcpo` proxy in between.
 
 If you also have the pasted Open WebUI tool, turn one of them off for the
 model. Otherwise it sees every tool twice.
+
+### In an existing compose file
+
+If Open WebUI already runs from compose, add the server as one more service
+on Open WebUI's network:
+
+```yaml
+services:
+  # ... your existing services
+
+  ha-llm-context:
+    build: https://github.com/mikepell007/ha-llm-context.git#main
+    container_name: ha-llm-context
+    restart: unless-stopped
+    command: ["--tz", "America/New_York"]
+    environment:
+      - HA_URL=${HA_URL}
+      - HA_TOKEN=${HA_TOKEN}
+      - MCP_TOKEN=${MCP_TOKEN}
+    ports:
+      - "8765:8765"        # only for clients on other machines; omit otherwise
+    networks:
+      - open-webui_default
+
+networks:
+  open-webui_default:
+    external: true
+```
+
+- **Network name:** use your own Open WebUI network's name. `docker network ls`
+  lists them.
+- **Settings:** `${...}` values come from a `.env` in the same folder as this
+  compose file.
+- **Addresses:** Open WebUI connects at `http://ha-llm-context:8765/mcp`.
+  Other machines connect at `http://<PC's IP>:8765/mcp`.
+- **Port:** to use a different port on the PC, change only the left side, as
+  in `"9000:8765"`.
+
+### Under mcpo
+
+If you run MCP servers through [mcpo](https://github.com/open-webui/mcpo), it
+can start this one over stdio, the same way it starts others:
+
+```yaml
+  mcpo-ha:
+    image: ghcr.io/open-webui/mcpo:main
+    container_name: mcpo-ha
+    restart: unless-stopped
+    command: >
+      --host 0.0.0.0
+      --port 8002
+      --api-key "${MCPO_HA_KEY}"
+      -- uvx --from "ha-llm-context[mcp] @ git+https://github.com/mikepell007/ha-llm-context.git"
+      ha-llm-context mcp --tz America/New_York
+    environment:
+      - HA_URL=${HA_URL}
+      - HA_TOKEN=${HA_TOKEN}
+    networks:
+      - open-webui_default
+```
+
+- **Protocol:** mcpo serves **OpenAPI, not MCP**, at `http://mcpo-ha:8002`.
+  Open WebUI adds it as an OpenAPI tool server. MCP clients such as LM Studio
+  can't use it; give them the HTTP service above instead.
+- **Ports:** nothing listens on 8765 in this container. Publish `8002` if
+  another machine needs it.
+- **Auth:** mcpo's `--api-key` protects it, so `MCP_TOKEN` isn't used.
+- **Updating:** a restart keeps the cached package. To pick up a push, run
+  `docker compose up -d --force-recreate mcpo-ha`.
+- **First start:** `uvx` installs the package from GitHub, so the container
+  needs working DNS when it first starts.
 
 ### Without Docker (systemd)
 
@@ -124,6 +199,21 @@ is opened, so MCP_TOKEN isn't needed.
   it again with the CLI. By default nothing is kept.
 - `--no-related`, `--max-related`, `--max-changes`, `--max-errors`,
   `--no-config`, `--attr`: the same as the CLI's options.
+
+## Troubleshooting
+
+- **Can't connect:** check that the URL ends in `/mcp`. Then check that it
+  doesn't say `localhost` when the client runs in a different container.
+- **401 Unauthorized:** the client's Bearer token doesn't match `MCP_TOKEN`.
+- **400 "Missing session ID" from curl or a browser:** that's normal. The
+  server is up; it only expects a real MCP client.
+- **No auth even though you set `MCP_TOKEN`:** the server prints a warning at
+  startup when it's listening without one. Check
+  `docker exec ha-llm-context printenv MCP_TOKEN`. Then make sure the `.env`
+  sits next to the compose file, and recreate the container with
+  `docker compose up -d`. A restart doesn't pick up new environment values.
+- **The tools appear twice:** turn off either the pasted Open WebUI tool or
+  this server for that model.
 
 ## Privacy
 

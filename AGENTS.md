@@ -5,9 +5,10 @@ condenses them into short timelines; and sends them with a question to a local L
 through an OpenAI-compatible API. It's a troubleshooting aid, not an HA
 integration: it runs outside HA and only reads from it.
 
-Status: all three stages work against a live HA instance, and the Open WebUI
-tool works inside Open WebUI. The MCP server is new: tested with the SDK's own
-client over stdio and HTTP, not yet with Open WebUI or LM Studio. Update this file as the layout changes.
+Status: all three stages work against a live HA instance. The Open WebUI tool
+works inside Open WebUI. The MCP server works over stdio and streamable HTTP,
+including from a client on another host, from its Docker image, and under
+mcpo. Update this file as the layout changes.
 
 ## Layout
 
@@ -18,16 +19,19 @@ client over stdio and HTTP, not yet with Open WebUI or LM Studio. Update this fi
 - `src/ha_llm_context/condense.py`: run directory → `timeline.txt`; pure, no network
 - `src/ha_llm_context/ask.py`: prompt building and the `/chat/completions` call
 - `src/ha_llm_context/pipeline.py`: entity search and collect-then-condense in one
-  call; shared by the CLI and the Open WebUI tool
+  call; used by the CLI and by `tools.py`
 - `src/ha_llm_context/tools.py`: the two model-facing tools (names, descriptions,
   parameter text, defaults, error handling) shared by both front ends below
-- `src/ha_llm_context/mcp_server.py`: MCP server (stdio, or streamable HTTP with an
-  optional bearer token from `MCP_TOKEN`); needs the `mcp` extra
+- `src/ha_llm_context/mcp_server.py`: MCP server (stdio, or streamable HTTP at
+  `/mcp` with an optional bearer token from `MCP_TOKEN`); needs the `mcp` extra.
+  It targets MCP SDK 2.x, where `FastMCP` is `mcp.server.mcpserver.MCPServer`.
 - `src/ha_llm_context/cli.py`: `find`, `collect`, `condense`, `ask`, `run`, `mcp` subcommands
 - `openwebui/ha_timeline_tool.py`: Open WebUI tool (pasted into Open WebUI, which
   installs this package from GitHub). It must stay a single file that imports
   `ha_llm_context`; keep logic in the package, not here. Settings are Valves.
-- `mcp/`: how to run the MCP server, and a compose file; `Dockerfile` at the root
+- `mcp/`: how to run the MCP server, and a compose file. `Dockerfile` at the root
+  copies only `pyproject.toml`, `README.md`, `LICENSE` and `src/`, and
+  `.dockerignore` keeps `.env` and `out/` out of the build context.
 - **Parity:** the MCP server and the Open WebUI tool offer the same tools. Change
   the text in `tools.py`, then copy it into the Open WebUI tool's docstrings
   (Open WebUI reads them from the pasted file). `tests/test_tool_parity.py`
